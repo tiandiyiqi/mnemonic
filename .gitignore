@@ -1,0 +1,6 @@
+node_modules/
+dist/
+.mnemonic/
+*.log
+.DS_Store
+.trae/
