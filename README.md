@@ -1,132 +1,173 @@
-# Mnemonic - AI Agent Skills CLI
+# Mnemonic - 通用 Agent 记忆系统
 
-**适用于任何 AI Agent 的技能管理 CLI 工具**
+`#AgentMemory` `#通用记忆系统` `#智能体存储` `#AI记忆` `#持久化记忆` `#跨会话记忆`
 
-Mnemonic 是一个 CLI 工具，用于安装、管理和分享 AI Agent 技能 (Skills)。支持 40+ 种编码代理，包括 Trae、Claude Code、Cursor、Windsurf 等。
+**让 AI Agent 拥有持久记忆，实现跨会话知识积累与智能决策**
 
-## 核心特性
+Mnemonic 是一个为 AI Agent 设计的通用记忆系统，提供 **全局 + 项目** 双层存储架构。通过 WAL (Write-Ahead Logging) 协议确保数据完整性，支持语义检索、上下文感知推荐和结构化自我反思，让 Agent 能够"记住"用户偏好、项目决策和历史经验。
 
-- 🚀 **一键安装** - 使用 `npx mnemonic add` 快速安装技能
-- 🔗 **多源支持** - GitHub、GitLab、本地路径、Git URL
-- 🤖 **40+ Agent 支持** - 自动检测已安装的编码代理
-- 🔗 **软链接安装** - 节省空间，便于更新
-- 📦 **内置技能** - 包含 Universal Memory 通用记忆系统
+## ✨ 核心特性
 
-## 快速开始
+- 🧠 **双层存储架构** - 全局记忆跨项目共享，项目记忆独立隔离，智能路由自动选择存储层
+- 📝 **WAL 写入协议** - 可靠的 Write-Ahead Logging，结构化格式确保记忆完整性与可追溯性
+- 🔍 **语义检索引擎** - 跨层级搜索相关记忆，智能匹配用户偏好、约束和历史决策
+- 💡 **上下文感知推荐** - 基于当前对话自动推荐相关记忆，主动预防重复错误
+- 🪞 **自我反思机制** - 任务完成后记录洞察与经验，实现持续学习与能力进化
+- ⚡ **零依赖设计** - 纯 Python 实现，无需外部数据库或第三方服务
 
-### 安装技能
+## 🚀 快速开始
 
-```bash
-# 从 GitHub 安装
-npx mnemonic add owner/skill-repo
-
-# 安装到全局 (所有项目可用)
-npx mnemonic add owner/skill-repo -g
-
-# 安装到特定 Agent
-npx mnemonic add owner/skill-repo -a trae -a claude-code
-
-# 从本地路径安装
-npx mnemonic add ./my-skill
-
-# 列出可用的技能 (不安装)
-npx mnemonic add owner/skill-repo --list
-```
-
-### 管理技能
+### 安装
 
 ```bash
-# 列出已安装的技能
-npx mnemonic list
-
-# 列出全局技能
-npx mnemonic list -g
-
-# 移除技能
-npx mnemonic remove skill-name
-
-# 创建新技能模板
-npx mnemonic init my-skill
-```
-
-## 支持的 Agent
-
-| Agent | --agent 参数 | 项目路径 | 全局路径 |
-|-------|-------------|---------|---------|
-| Trae | `trae` | `.trae/skills/` | `~/.trae/skills/` |
-| Trae CN | `trae-cn` | `.trae/skills/` | `~/.trae-cn/skills/` |
-| Claude Code | `claude-code` | `.claude/skills/` | `~/.claude/skills/` |
-| Cursor | `cursor` | `.agents/skills/` | `~/.cursor/skills/` |
-| Codex | `codex` | `.agents/skills/` | `~/.codex/skills/` |
-| Windsurf | `windsurf` | `.windsurf/skills/` | `~/.codeium/windsurf/skills/` |
-| Cline | `cline` | `.agents/skills/` | `~/.agents/skills/` |
-| Goose | `goose` | `.goose/skills/` | `~/.config/goose/skills/` |
-| OpenCode | `opencode` | `.agents/skills/` | `~/.config/opencode/skills/` |
-| ... | ... | ... | ... |
-
-完整列表请运行 `npx mnemonic add --help` 查看。
-
-## 内置技能：Universal Memory
-
-本项目内置了 **Universal Memory** 通用记忆系统，提供 **全局 + 项目** 双层存储架构。
-
-### 安装 Universal Memory
-
-```bash
-# 安装到当前项目
+# 使用 npx 一键安装到你的 Agent
 npx mnemonic add universal-memory -a trae
 
-# 安装到全局
+# 安装到全局 (所有项目可用)
 npx mnemonic add universal-memory -g -a trae
 ```
 
-### Universal Memory 功能
+支持的 Agent：Trae、Claude Code、Cursor、Windsurf、Codex、Cline 等 40+ 种编码代理。
 
-- 🧠 **双层存储** - 全局记忆跨项目共享，项目记忆独立隔离
-- 📝 **WAL 协议** - 可靠的写入前日志，确保数据完整性
-- 🔍 **语义检索** - 跨层级搜索相关记忆
-- 💡 **主动推荐** - 基于上下文自动推荐相关记忆
-- 🪞 **自我反思** - 任务完成后记录洞察，持续学习
+### 初始化
 
-### Universal Memory 使用
+```bash
+# 初始化全局记忆存储
+python3 scripts/memory_cli.py init-global
 
-安装后，Agent 会自动根据用户表达调用相应功能：
+# 在项目目录中初始化项目记忆
+python3 scripts/memory_cli.py init-project
+```
 
-- "记住我喜欢简洁的回复" → 存储偏好
-- "这个项目使用 PostgreSQL" → 存储决策
-- "不要使用 var 关键字" → 存储约束
-- "我之前说过什么偏好？" → 搜索记忆
+## 📖 使用指南
 
-## 安装选项
+### 存储记忆 (remember)
 
-| 选项 | 说明 |
+Agent 会自动识别用户表达并存储相应类型的记忆：
+
+| 触发示例 | 记忆类型 | 存储位置 |
+|---------|---------|---------|
+| "记住我喜欢简洁的回复" | `preference` | 全局 RULES.md |
+| "不要使用 var 关键字" | `constraint` | 全局 RULES.md |
+| "这个项目使用 PostgreSQL" | `decision` | 项目 DECISIONS.md |
+| "上次用错了 API 版本" | `correction` | 项目 SESSION.md |
+
+```bash
+# 手动存储记忆
+python3 scripts/memory_cli.py remember "用户偏好函数式编程风格" --type preference
+python3 scripts/memory_cli.py remember "API 采用 REST 架构" --type decision --project-dir /path/to/project
+```
+
+### 搜索记忆 (search)
+
+```bash
+# 自动搜索 (优先项目层，然后全局层)
+python3 scripts/memory_cli.py search "数据库" --project-dir /path/to/project
+
+# 仅搜索全局层
+python3 scripts/memory_cli.py search "偏好" --scope global
+
+# JSON 格式输出 (便于程序处理)
+python3 scripts/memory_cli.py search "数据库" --json
+```
+
+### 自我反思 (reflect)
+
+任务完成后记录经验教训，实现持续学习：
+
+```bash
+python3 scripts/memory_cli.py reflect \
+  --task "重构登录模块" \
+  --outcome success \
+  --confidence 0.9 \
+  --insight "使用了通用的异常捕获，下次应该更具体"
+```
+
+### 主动感知 (perceive)
+
+基于当前上下文主动推荐相关记忆：
+
+```bash
+python3 scripts/memory_cli.py perceive "用户正在询问关于登录模块的重构"
+```
+
+## 🏗️ 架构设计
+
+### 双层存储结构
+
+```
+~/.mnemonic/                    # 全局记忆 (跨项目共享)
+├── RULES.md                    # 全局偏好与约束
+├── JOURNAL/                    # 全局反思日志 (YYYY-MM-DD.md)
+└── audit.jsonl                 # 全局审计日志
+
+项目目录/.mnemonic/              # 项目记忆 (项目特定)
+├── SESSION.md                  # 项目会话上下文
+├── DECISIONS.md                # 项目决策记录
+└── audit.jsonl                 # 项目审计日志
+```
+
+### 记忆路由规则
+
+| 记忆类型 | 存储层 | 说明 |
+|---------|-------|------|
+| `preference` | 全局 COLD | 用户偏好，跨项目生效 |
+| `constraint` | 全局 COLD | 约束条件，跨项目生效 |
+| `decision` | 项目 HOT | 项目决策，仅当前项目 |
+| `correction` | 项目 HOT | 纠正记录，项目特定 |
+| `reflect` | 全局 WARM | 反思日志，跨项目学习 |
+
+## 💡 应用场景
+
+### 场景1：错误预防
+```
+历史：reflect 记录 "重构登录模块失败：使用了过时的 API"
+当前：用户询问 "如何重构认证模块？"
+perceive：推荐 "上次重构登录时使用了过时 API，请检查 API 版本"
+```
+
+### 场景2：最佳实践复用
+```
+历史：reflect 记录 "性能优化成功：使用缓存策略提升了 50% 性能"
+当前：用户询问 "如何优化查询性能？"
+perceive：推荐 "之前使用缓存策略成功提升 50% 性能，可参考"
+```
+
+### 场景3：用户偏好学习
+```
+历史：remember 记录 "用户偏好函数式编程风格"
+当前：用户询问 "如何实现数据处理？"
+perceive：推荐 "用户偏好函数式风格，建议使用 map/filter/reduce"
+```
+
+### 场景4：跨项目知识迁移
+```
+历史：项目A 的 decision "使用 Redis 做会话存储"
+当前：在项目B 询问 "会话存储方案？"
+perceive：推荐 "项目A 使用 Redis 做会话存储，可参考"
+```
+
+## 📋 命令参考
+
+| 命令 | 说明 |
 |-----|------|
-| `-g, --global` | 安装到全局目录 |
-| `-a, --agent <names...>` | 指定目标 Agent |
-| `-s, --skill <names...>` | 指定要安装的技能 |
-| `-l, --list` | 列出可用技能 |
-| `--copy` | 复制文件而非软链接 |
-| `-y, --yes` | 跳过确认提示 |
+| `init-global` | 初始化全局记忆存储 |
+| `init-project` | 初始化项目记忆存储 |
+| `remember` | 存储 WAL 格式的记忆 |
+| `search` | 跨层检索记忆 |
+| `reflect` | 记录自我反思日志 |
+| `perceive` | 主动推荐相关记忆 |
+| `migrate` | 迁移旧版数据到新架构 |
 
-## 技能发现
+## 🔧 系统要求
 
-CLI 会在以下路径搜索 SKILL.md 文件：
+- Python 3.8+
+- 无外部依赖
 
-- `skills/`
-- `.agents/skills/`
-- `.claude/skills/`
-- `.cursor/skills/`
-- 以及更多...
-
-## 系统要求
-
-- Node.js 18.0.0+
-- Git (用于克隆远程仓库)
-
-## 许可证
+## 📄 许可证
 
 MIT License
 
 ---
 
-*Mnemonic CLI v1.0 - AI Agent Skills Manager*
+*Mnemonic - 让 AI Agent 拥有持久记忆*
