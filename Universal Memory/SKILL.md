@@ -41,61 +41,61 @@ This skill provides a self-contained memory system with **Global + Project** dua
 
 ```bash
 # Initialize global memory
-python scripts/memory_cli.py init-global
+python3 scripts/memory_cli.py init-global
 
 # Initialize project memory (in project directory)
-python scripts/memory_cli.py init-project
+python3 scripts/memory_cli.py init-project
 
 # Or specify project path
-python scripts/memory_cli.py init-project --project-dir /path/to/project
+python3 scripts/memory_cli.py init-project --project-dir /path/to/project
 ```
 
 ### 2. Remember (WAL Storage)
 
 ```bash
 # Global preference (auto-routed to global)
-python scripts/memory_cli.py remember "User prefers concise responses" --type preference
+python3 scripts/memory_cli.py remember "User prefers concise responses" --type preference
 
 # Project decision (specify project directory)
-python scripts/memory_cli.py remember "Use PostgreSQL as database" --type decision --project-dir /path/to/project
+python3 scripts/memory_cli.py remember "Use PostgreSQL as database" --type decision --project-dir /path/to/project
 
 # Explicit scope
-python scripts/memory_cli.py remember "Always use TypeScript" --type constraint --scope global
-python scripts/memory_cli.py remember "API uses REST architecture" --type decision --scope project --project-dir /path/to/project
+python3 scripts/memory_cli.py remember "Always use TypeScript" --type constraint --scope global
+python3 scripts/memory_cli.py remember "API uses REST architecture" --type decision --scope project --project-dir /path/to/project
 ```
 
 ### 3. Search (Cross-Layer Retrieval)
 
 ```bash
 # Auto search (project first, then global)
-python scripts/memory_cli.py search "database" --project-dir /path/to/project
+python3 scripts/memory_cli.py search "database" --project-dir /path/to/project
 
 # Global only
-python scripts/memory_cli.py search "preference" --scope global
+python3 scripts/memory_cli.py search "preference" --scope global
 
 # Project only
-python scripts/memory_cli.py search "decision" --scope project --project-dir /path/to/project
+python3 scripts/memory_cli.py search "decision" --scope project --project-dir /path/to/project
 
 # JSON output
-python scripts/memory_cli.py search "database" --json --project-dir /path/to/project
+python3 scripts/memory_cli.py search "database" --json --project-dir /path/to/project
 ```
 
 ### 4. Reflect (Self-Reflection)
 
 ```bash
-python scripts/memory_cli.py reflect --task "Refactor login" --outcome success --confidence 0.9 --insight "Used generic catch-all, should be more specific next time"
+python3 scripts/memory_cli.py reflect --task "Refactor login" --outcome success --confidence 0.9 --insight "Used generic catch-all, should be more specific next time"
 ```
 
 ### 5. Perceive (Active Recommendation)
 
 ```bash
-python scripts/memory_cli.py perceive "The user is asking about the refactoring of login module"
+python3 scripts/memory_cli.py perceive "The user is asking about the refactoring of login module"
 ```
 
 ### 6. Migrate Legacy Data
 
 ```bash
-python scripts/memory_cli.py migrate
+python3 scripts/memory_cli.py migrate
 ```
 
 ## Tools
@@ -107,13 +107,24 @@ Store a key fact using WAL protocol. Use for preferences, decisions, constraints
 
 **Arguments:**
 - `content` (string, required): The fact to remember
-- `type` (string, required): One of `preference`, `decision`, `constraint`, `correction`
+- `type` (string, optional): One of `preference`, `decision`, `constraint`, `correction`. Default: `preference`
 - `scope` (string, optional): `auto`, `global`, or `project`. Default: `auto`
-- `project_dir` (string, optional): Project directory path for project-scoped memories
+- `project_dir` (string, required for decision/correction): Project directory path for project-scoped memories
+- `source` (string, optional): Memory source — `user_dialog`, `agent_infer`, or `reflection`. Default: `user_dialog`
+- `confidence` (string, optional): Confidence score 0.0-1.0. Default: `0.9`
 
 **Auto-routing logic:**
 - `preference` and `constraint` → Global storage (`~/.mnemonic/RULES.md`)
-- `decision` and `correction` → Project storage (if `project_dir` provided)
+- `decision` and `correction` → Project storage (`project_dir` required, error if not provided)
+
+**Conflict detection:**
+- Before writing, detects existing memories of the same type with >70% keyword similarity
+- Conflicting old memories are automatically marked as `[DEPRECATED]`
+- Audit log records conflict events
+
+**Provenance metadata:**
+- Each memory includes a META comment: `<!-- META: {"source":"user_dialog","confidence":0.9} -->`
+- Old format memories (without META) are treated as source=unknown, confidence=0.8
 
 ### `search`
 Search for relevant context across all memory layers.
@@ -123,10 +134,22 @@ Search for relevant context across all memory layers.
 - `scope` (string, optional): `auto`, `global`, or `project`. Default: `auto`
 - `project_dir` (string, optional): Project directory path
 - `limit` (integer, optional): Max results. Default: 5
+- `include-archive` (flag, optional): Also search archived memories in history/
+
+**Notes:**
+- DEPRECATED memories are automatically filtered out
+- Results include `source` and `confidence` metadata from provenance tracking
 
 **Search priority (auto mode):**
 1. Project layer first (more specific)
 2. Global layer second (general preferences)
+3. Merge and sort by relevance score
+
+**Source weights:**
+- `project/session`: 1.2 (most relevant)
+- `project/decisions`: 1.1
+- `global/journal`: 1.0
+- `global/rules`: 0.9
 
 ### `perceive`
 Proactively find relevant memories based on current conversation context. Extract keywords, search across all memory layers, and return actionable recommendations.
@@ -171,7 +194,7 @@ Perform self-reflection after completing a significant task. Logs insights for f
 **Arguments:**
 - `task` (string, required): Description of the task
 - `outcome` (string, required): `success`, `failure`, or `partial`
-- `confidence` (number, optional): Self-assessed confidence 0.0-1.0. Default: 0.8
+- `confidence` (string, optional): Self-assessed confidence 0.0-1.0. Default: "0.8"
 - `insight` (string, required): Key learning from this task
 
 ### `init-project`
@@ -251,21 +274,40 @@ Log a self-reflection after completing a task.
 - `--insight`: Key learning (required)
 
 ### `perceive`
-Extract keywords from context.
+Extract keywords from context and find related memories.
 
 **Arguments:**
-- `context`: Context text
+- `context` (string, required): Context text
+- `--project-dir` (string, optional): Project directory path
+- `--json` (flag, optional): Output as JSON (default behavior)
 
 ### `migrate`
 Migrate legacy `.mnemonic_data/` to new dual-layer architecture.
+
+### `archive`
+Archive old/deprecated memories to history/ directory. DEPRECATED memories are archived automatically. File size warnings are shown when memory files exceed 200 lines.
+
+**Arguments:**
+- `--scope` (string, optional): `auto`, `global`, or `project`. Default: `auto`
+- `--project-dir` (string, optional): Project directory path
+- `--json` (flag, optional): Output as JSON
+
+**Archive behavior:**
+- Automatically archives all DEPRECATED memories to `history/{filename}_{date}.md`
+- Shows file size warnings for files exceeding 200 lines
+- Archived memories can be searched with `search --include-archive`
+
+**Archive locations:**
+- Global: `~/.mnemonic/history/`
+- Project: `项目/.mnemonic/history/`
 
 ## Search Priority
 
 When using `--scope auto`:
 
-1. **Project layer first** - More specific, more relevant
-2. **Global layer second** - General preferences and constraints
-3. **Merge and sort** - By relevance score
+1. **Project layer first** - More specific, more relevant (session: 1.2, decisions: 1.1)
+2. **Global layer second** - General preferences and constraints (journal: 1.0, rules: 0.9)
+3. **Merge and sort** - By relevance score (base_score × time_decay × source_weight)
 
 ## Installation
 

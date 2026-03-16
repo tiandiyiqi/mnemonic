@@ -22,6 +22,83 @@ GLOBAL_RULES_FILE = GLOBAL_MNEMONIC_DIR / "RULES.md"
 GLOBAL_JOURNAL_DIR = GLOBAL_MNEMONIC_DIR / "JOURNAL"
 GLOBAL_AUDIT_LOG = GLOBAL_MNEMONIC_DIR / "audit.jsonl"
 
+def parse_meta(line: str) -> Dict[str, Any]:
+    """Parse META comment from a WAL line. Returns default values for old format."""
+    meta_match = re.search(r'<!-- META: ({.*?}) -->', line)
+    if meta_match:
+        try:
+            return json.loads(meta_match.group(1))
+        except (json.JSONDecodeError, ValueError):
+            pass
+    return {"source": "unknown", "confidence": 0.8}
+
+def strip_meta(line: str) -> str:
+    """Remove META comment from a line for display."""
+    return re.sub(r'\s*<!-- META: {.*?} -->', '', line)
+
+def detect_conflict(target_file: Path, mem_type: str, content: str) -> List[Dict[str, Any]]:
+    """Detect conflicting memories of the same type in target file."""
+    if not target_file.exists():
+        return []
+    conflicts = []
+    content_keywords = set(re.findall(r'[a-zA-Z]{3,}', content.lower()))
+    content_keywords.update(re.findall(r'[\u4e00-\u9fa5]{2,4}', content))
+    if not content_keywords:
+        return []
+    lines = target_file.read_text(encoding="utf-8").splitlines()
+    type_tag = f"[{mem_type.upper()}]"
+    for i, line in enumerate(lines):
+        if type_tag not in line or "[DEPRECATED" in line:
+            continue
+        # Extract actual content: remove timestamp, type tag, nonce, and META
+        line_clean = strip_meta(line)
+        # Remove timestamp pattern: [YYYY-MM-DD HH:MM:SS]
+        line_clean = re.sub(r'\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\]', '', line_clean)
+        # Remove type tag: [PREFERENCE], [DECISION], etc.
+        line_clean = re.sub(r'\[' + mem_type.upper() + r'\]', '', line_clean, flags=re.IGNORECASE)
+        # Remove nonce: (nonce: xxxxxxxx)
+        line_clean = re.sub(r'\(nonce:\s*[a-f0-9]+\)', '', line_clean)
+        # Remove leading dash and whitespace
+        line_clean = re.sub(r'^-\s*', '', line_clean).strip()
+
+        line_keywords = set(re.findall(r'[a-zA-Z]{3,}', line_clean.lower()))
+        line_keywords.update(re.findall(r'[\u4e00-\u9fa5]{2,4}', line_clean))
+        if not line_keywords:
+            continue
+        overlap = content_keywords & line_keywords
+        similarity = len(overlap) / max(len(content_keywords | line_keywords), 1)
+        if similarity > 0.7:
+            conflicts.append({"line": i, "content": line, "similarity": round(similarity, 2)})
+    return conflicts
+
+def mark_deprecated(target_file: Path, conflicts: List[Dict[str, Any]], new_nonce: str) -> int:
+    """Mark conflicting lines as DEPRECATED in target file. Returns count of marked lines."""
+    if not conflicts or not target_file.exists():
+        return 0
+    lines = target_file.read_text(encoding="utf-8").splitlines()
+    marked = 0
+    for conflict in conflicts:
+        idx = conflict["line"]
+        if idx < len(lines) and "[DEPRECATED" not in lines[idx]:
+            original = lines[idx]
+            clean = strip_meta(original).strip()
+            if clean.startswith("- "):
+                clean = clean[2:]
+            lines[idx] = f"- ~~{clean}~~ [DEPRECATED by nonce:{new_nonce}]"
+            marked += 1
+    if marked > 0:
+        target_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return marked
+
+def check_file_size(file_path: Path, threshold: int = 200) -> Optional[str]:
+    """Check if a file exceeds line threshold. Returns warning message or None."""
+    if not file_path.exists():
+        return None
+    line_count = len(file_path.read_text(encoding="utf-8").splitlines())
+    if line_count > threshold:
+        return f"⚠️ {file_path.name} has {line_count} lines (threshold: {threshold}). Consider running 'archive' command to clean up."
+    return None
+
 def get_project_paths(project_dir: Optional[str] = None) -> Dict[str, Path]:
     project_root = Path(project_dir) if project_dir else Path.cwd()
     mnemonic_dir = project_root / ".mnemonic"
@@ -114,6 +191,11 @@ def cmd_remember(args):
     if args.scope == "auto":
         if mem_type in ["preference", "constraint"]:
             scope = "global"
+        elif mem_type in ["decision", "correction"]:
+            if not args.project_dir:
+                print(f"❌ Error: {mem_type} requires --project-dir (project-specific memory)")
+                sys.exit(1)
+            scope = "project"
         else:
             scope = args.project_dir and "project" or "global"
     else:
@@ -135,16 +217,40 @@ def cmd_remember(args):
         audit_file = paths["audit"]
     
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    entry = f"- [{timestamp}] [{mem_type.upper()}] {content} (nonce: {nonce})\n"
-    
+    source = getattr(args, 'source', 'user_dialog') or 'user_dialog'
+    confidence = float(getattr(args, 'confidence', '0.9') or '0.9')
+    meta = json.dumps({"source": source, "confidence": confidence}, ensure_ascii=False)
+    entry = f"- [{timestamp}] [{mem_type.upper()}] {content} (nonce: {nonce}) <!-- META: {meta} -->\n"
+
+    # Conflict detection: check for similar memories of the same type
+    conflicts = detect_conflict(target_file, mem_type, content)
+    if conflicts:
+        marked = mark_deprecated(target_file, conflicts, nonce)
+        if marked > 0:
+            conflict_msg = f"🔄 Detected {marked} conflicting {mem_type}(s), marked as DEPRECATED"
+            if not getattr(args, 'json', False):
+                print(conflict_msg)
+            write_audit(audit_file, "conflict", "deprecate", {
+                "new_nonce": nonce,
+                "deprecated_count": marked,
+                "conflicts": [c["content"][:100] for c in conflicts]
+            }, scope)
+
     with open(target_file, "a", encoding="utf-8") as f:
         f.write(entry)
+
+    # File size warning
+    size_warning = check_file_size(target_file)
+    if size_warning and not getattr(args, 'json', False):
+        print(size_warning)
     
     write_audit(audit_file, "wal", "remember", {
-        "type": mem_type, 
-        "content": content, 
-        "nonce": nonce, 
-        "file": str(target_file)
+        "type": mem_type,
+        "content": content,
+        "nonce": nonce,
+        "file": str(target_file),
+        "source": source,
+        "confidence": confidence
     }, scope)
     
     result = {"status": "success", "nonce": nonce, "target": str(target_file), "scope": scope}
@@ -163,15 +269,20 @@ def cmd_search(args):
             if file_path.exists():
                 lines = file_path.read_text(encoding="utf-8").splitlines()
                 for i, line in enumerate(lines):
+                    if "[DEPRECATED" in line:
+                        continue
                     if query in line.lower():
+                        meta = parse_meta(line)
                         results.append({
                             "tier": "project",
                             "file": file_path.name,
                             "line": i + 1,
-                            "content": line.strip(),
-                            "score": 1.0 if query == line.lower().strip() else 0.8
+                            "content": strip_meta(line.strip()),
+                            "score": 1.0 if query == line.lower().strip() else 0.8,
+                            "source": meta.get("source", "unknown"),
+                            "confidence": meta.get("confidence", 0.8)
                         })
-    
+
     if args.scope in ["auto", "global"]:
         ensure_global_dirs()
         files_to_search = [
@@ -179,22 +290,56 @@ def cmd_search(args):
         ]
         for f in GLOBAL_JOURNAL_DIR.glob("*.md"):
             files_to_search.append(("warm", f))
-        
+
         for tier, file_path in files_to_search:
             if not file_path.exists():
                 continue
             lines = file_path.read_text(encoding="utf-8").splitlines()
             for i, line in enumerate(lines):
+                if "[DEPRECATED" in line:
+                    continue
                 if query in line.lower():
+                    meta = parse_meta(line)
                     results.append({
                         "tier": f"global/{tier}",
                         "file": file_path.name,
                         "line": i + 1,
-                        "content": line.strip(),
-                        "score": 0.9 if query == line.lower().strip() else 0.7
+                        "content": strip_meta(line.strip()),
+                        "score": 0.9 if query == line.lower().strip() else 0.7,
+                        "source": meta.get("source", "unknown"),
+                        "confidence": meta.get("confidence", 0.8)
                     })
     
     results.sort(key=lambda x: x["score"], reverse=True)
+
+    # TASK-014: Search archived memories if --include-archive
+    if getattr(args, 'include_archive', False):
+        archive_dirs = []
+        if args.scope in ["auto", "global"]:
+            global_history = GLOBAL_MNEMONIC_DIR / "history"
+            if global_history.exists():
+                archive_dirs.append(("global/archive", global_history))
+        if args.scope in ["auto", "project"] and args.project_dir:
+            project_history = get_project_paths(args.project_dir)["dir"] / "history"
+            if project_history.exists():
+                archive_dirs.append(("project/archive", project_history))
+        for tier, history_dir in archive_dirs:
+            for archive_file in history_dir.glob("*.md"):
+                lines = archive_file.read_text(encoding="utf-8").splitlines()
+                for i, line in enumerate(lines):
+                    if query in line.lower():
+                        meta = parse_meta(line)
+                        results.append({
+                            "tier": tier,
+                            "file": archive_file.name,
+                            "line": i + 1,
+                            "content": strip_meta(line.strip()),
+                            "score": 0.5,
+                            "source": meta.get("source", "unknown"),
+                            "confidence": meta.get("confidence", 0.8)
+                        })
+        results.sort(key=lambda x: x["score"], reverse=True)
+
     results = results[:args.limit]
     
     if args.json:
@@ -327,6 +472,8 @@ def search_all_sources(keywords: List[str], project_dir: Optional[str] = None) -
             for i, line in enumerate(lines):
                 if not line.strip():
                     continue
+                if "[DEPRECATED" in line:
+                    continue
                 if line.startswith("### Reflection:"):
                     current_reflection = line.replace("### Reflection:", "").strip()
                 if line.startswith("# ") and not line.startswith("###"):
@@ -334,15 +481,18 @@ def search_all_sources(keywords: List[str], project_dir: Optional[str] = None) -
                 line_lower = line.lower()
                 for kw in keywords:
                     if kw.lower() in line_lower:
+                        meta = parse_meta(line)
                         mem = {
                             "source": f"{source_type}/{file_path.name}",
                             "source_type": source_type,
                             "file": file_path.name,
                             "line": i + 1,
-                            "content": line.strip(),
+                            "content": strip_meta(line.strip()),
                             "keyword": kw,
                             "source_weight": source_weight,
-                            "file_date": file_path.stem if source_type == "global/journal" else None
+                            "file_date": file_path.stem if source_type == "global/journal" else None,
+                            "mem_source": meta.get("source", "unknown"),
+                            "mem_confidence": meta.get("confidence", 0.8)
                         }
                         if current_reflection:
                             mem["reflection_task"] = current_reflection
@@ -444,7 +594,14 @@ def cmd_perceive(args):
         ],
         "recommendations": recommendations
     }
-    print(json.dumps(result, ensure_ascii=False, indent=2))
+    if getattr(args, 'json', False) or True:
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+    else:
+        if not recommendations:
+            print("No relevant memories found.")
+        else:
+            for rec in recommendations:
+                print(rec)
 
 def cmd_reflect(args):
     ensure_global_dirs()
@@ -500,6 +657,74 @@ def cmd_migrate(args):
     
     print("✅ Migration completed!")
 
+def cmd_archive(args):
+    """Archive old memories to history/ directory. User decides what to archive."""
+    project_dir = getattr(args, 'project_dir', None)
+    scope = getattr(args, 'scope', 'auto') or 'auto'
+
+    files_to_check = []
+
+    if scope in ["auto", "global"]:
+        ensure_global_dirs()
+        global_history = GLOBAL_MNEMONIC_DIR / "history"
+        os.makedirs(global_history, exist_ok=True)
+        files_to_check.append(("global", GLOBAL_RULES_FILE, global_history))
+
+    if scope in ["auto", "project"] and project_dir:
+        ensure_project_dirs(project_dir)
+        paths = get_project_paths(project_dir)
+        project_history = paths["dir"] / "history"
+        os.makedirs(project_history, exist_ok=True)
+        files_to_check.append(("project", paths["session"], project_history))
+        files_to_check.append(("project", paths["decisions"], project_history))
+
+    if not files_to_check:
+        print("❌ No files to archive. Use --project-dir for project memories or --scope global for global memories.")
+        return
+
+    today = datetime.now().strftime("%Y-%m-%d")
+    archived_total = 0
+
+    for scope_name, file_path, history_dir in files_to_check:
+        if not file_path.exists():
+            continue
+        lines = file_path.read_text(encoding="utf-8").splitlines()
+        memory_lines = [i for i, l in enumerate(lines) if l.strip().startswith("- ") and ("[DEPRECATED" in l or "[PREFERENCE]" in l or "[DECISION]" in l or "[CONSTRAINT]" in l or "[CORRECTION]" in l)]
+
+        if not memory_lines:
+            print(f"  {file_path.name}: No memories to archive.")
+            continue
+
+        # Show file status
+        warning = check_file_size(file_path)
+        if warning:
+            print(warning)
+        else:
+            print(f"  {file_path.name}: {len(memory_lines)} memories ({len(lines)} lines total)")
+
+        # List deprecated memories for auto-archive
+        deprecated = [i for i in memory_lines if "[DEPRECATED" in lines[i]]
+        if deprecated:
+            print(f"  Found {len(deprecated)} DEPRECATED memories — archiving automatically.")
+            archive_file = history_dir / f"{file_path.stem}_{today}.md"
+            with open(archive_file, "a", encoding="utf-8") as af:
+                af.write(f"\n# Archived from {file_path.name} on {today}\n\n")
+                for idx in sorted(deprecated, reverse=True):
+                    af.write(lines[idx] + "\n")
+                    lines[idx] = None
+            lines = [l for l in lines if l is not None]
+            file_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+            archived_total += len(deprecated)
+            print(f"  ✅ Archived {len(deprecated)} DEPRECATED memories to {archive_file.name}")
+
+    if archived_total > 0:
+        print(f"\n✅ Archive completed: {archived_total} memories archived.")
+    else:
+        print("\n📝 No DEPRECATED memories found to archive. Use 'remember' to update memories — old ones will be auto-deprecated.")
+
+    if getattr(args, 'json', False):
+        print(json.dumps({"archived": archived_total}, ensure_ascii=False))
+
 def main():
     parser = argparse.ArgumentParser(description="Mnemonic - Standalone Memory Skill (Dual-Layer)")
     subparsers = parser.add_subparsers(dest="command")
@@ -514,6 +739,8 @@ def main():
     p_rem.add_argument("--type", choices=["preference", "decision", "constraint", "correction"], default="preference")
     p_rem.add_argument("--scope", choices=["auto", "global", "project"], default="auto", help="Storage scope")
     p_rem.add_argument("--project-dir", help="Project directory path")
+    p_rem.add_argument("--source", choices=["user_dialog", "agent_infer", "reflection"], default="user_dialog", help="Memory source")
+    p_rem.add_argument("--confidence", default="0.9", help="Confidence score 0.0-1.0")
     p_rem.add_argument("--json", action="store_true")
     
     p_search = subparsers.add_parser("search", help="Search memories")
@@ -521,6 +748,7 @@ def main():
     p_search.add_argument("--scope", choices=["auto", "global", "project"], default="auto", help="Search scope")
     p_search.add_argument("--project-dir", help="Project directory path")
     p_search.add_argument("--limit", type=int, default=5)
+    p_search.add_argument("--include-archive", action="store_true", help="Also search archived memories in history/")
     p_search.add_argument("--json", action="store_true")
     
     p_per = subparsers.add_parser("perceive", help="Extract keywords and find related memories")
@@ -535,9 +763,14 @@ def main():
     p_ref.add_argument("--insight", required=True)
     
     p_migrate = subparsers.add_parser("migrate", help="Migrate legacy data to new architecture")
-    
+
+    p_archive = subparsers.add_parser("archive", help="Archive old/deprecated memories to history/")
+    p_archive.add_argument("--scope", choices=["auto", "global", "project"], default="auto", help="Archive scope")
+    p_archive.add_argument("--project-dir", help="Project directory path")
+    p_archive.add_argument("--json", action="store_true")
+
     args = parser.parse_args()
-    
+
     if args.command == "init-global": cmd_init_global(args)
     elif args.command == "init-project": cmd_init_project(args)
     elif args.command == "remember": cmd_remember(args)
@@ -545,6 +778,7 @@ def main():
     elif args.command == "perceive": cmd_perceive(args)
     elif args.command == "reflect": cmd_reflect(args)
     elif args.command == "migrate": cmd_migrate(args)
+    elif args.command == "archive": cmd_archive(args)
     else: parser.print_help()
 
 if __name__ == "__main__":
