@@ -40,13 +40,19 @@ mnemonic/
 
 ## 🚀 快速开始
 
-### 通过 GitHub Releases 安装（推荐）
+### 通过 GitHub 安装（推荐）
 
 ```bash
-# 直接使用 npx 从 GitHub 安装
+# 方式 1：使用 npx（推荐）
 npx https://github.com/tiandiyiqi/mnemonic
 
-# 或克隆仓库并安装
+# 方式 2：使用 github: 前缀（小写）
+npx github:tiandiyiqi/mnemonic
+
+# ⚠️ 注意：不要使用大写 GitHub: 前缀，会报错
+# npx GitHub:tiandiyiqi/mnemonic  ❌ 错误！
+
+# 方式 3：克隆仓库并安装
 git clone https://github.com/tiandiyiqi/mnemonic.git
 cd mnemonic
 npm install -g .
