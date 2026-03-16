@@ -38,9 +38,33 @@ mnemonic/
 - `mnemonic` - TypeScript CLI，用于管理 skills（安装、列表、移除）
 - `memory_cli.py` - Python CLI，记忆系统核心功能（存储、搜索、反思）
 
-## �🚀 快速开始
+## 🚀 快速开始
 
-### 安装
+### 本地使用
+
+由于 `mnemonic` CLI 尚未发布到 npm registry，在本地使用时需要先构建项目：
+
+```bash
+# 1. 克隆或进入项目目录
+cd mnemonic
+
+# 2. 安装依赖并构建
+npm install
+npm run build
+
+# 3. 使用 node 直接运行 CLI
+node dist/index.js add universal-memory -a trae
+
+# 4. 列出已安装的 skills
+node dist/index.js list
+
+# 5. 移除 skill
+node dist/index.js remove universal-memory -a trae
+```
+
+### 通过 npm 安装（待发布）
+
+发布到 npm 后，可以使用以下命令：
 
 ```bash
 # 安装到 Trae
