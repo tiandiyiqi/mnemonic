@@ -40,6 +40,18 @@ mnemonic/
 
 ## 🚀 快速开始
 
+### 通过 GitHub Releases 安装（推荐）
+
+```bash
+# 直接使用 npx 从 GitHub 安装
+npx https://github.com/tiandiyiqi/mnemonic
+
+# 或克隆仓库并安装
+git clone https://github.com/tiandiyiqi/mnemonic.git
+cd mnemonic
+npm install -g .
+```
+
 ### 本地使用
 
 由于 `mnemonic` CLI 尚未发布到 npm registry，在本地使用时需要先构建项目：
