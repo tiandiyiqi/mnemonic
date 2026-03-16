@@ -1,6 +1,7 @@
 {
   "name": "mnemonic-cli",
   "version": "1.0.0",
+  "type": "module",
   "description": "CLI for managing AI agent skills - install, list, and remove skills from any coding agent",
   "keywords": [
     "cli",

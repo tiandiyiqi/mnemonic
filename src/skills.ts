@@ -1,8 +1,12 @@
 import path from 'path';
 import fs from 'fs-extra';
 import matter from 'gray-matter';
+import { fileURLToPath } from 'url';
 import { Skill, SourceInfo } from './types.js';
 import { cloneRepo, cleanupTempRepo } from './git.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const SKILL_SEARCH_PATHS = [
   '',
@@ -229,7 +233,8 @@ export async function getSkillByName(
 }
 
 export async function getBuiltInSkills(): Promise<Skill[]> {
-  const skillsDir = path.join(process.cwd(), 'skills');
+  const packageRoot = path.resolve(__dirname, '..');
+  const skillsDir = path.join(packageRoot, 'skills');
   
   if (!(await fs.pathExists(skillsDir))) {
     return [];

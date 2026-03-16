@@ -1,6 +1,6 @@
 ---
 name: universal-memory
-description: 通用记忆系统，持久化用户偏好、决策和约束。Triggers: 记住, 我喜欢, 我偏好, 不要, 必须, 始终, 之前说过, remember, preference, decision, constraint. Use when user expresses preferences, sets constraints, makes decisions, or asks about previous memories. Supports dual-layer storage (Global + Project) and self-reflection.
+description: 通用记忆系统，持久化用户偏好、决策和约束
 ---
 
 # Universal Memory (Mnemonic)
