@@ -22,7 +22,7 @@ export async function add(options: AddOptions): Promise<void> {
       (s) => s.name === source || s.name === path.basename(source)
     );
     
-    if (builtInSkill && (source.startsWith('./') || source.startsWith('skills/') || !source.includes('/'))) {
+    if (builtInSkill) {
       sourceInfo = { type: 'local' as const, url: builtInSkill.sourcePath };
       spinner.text = `Using built-in skill: ${builtInSkill.name}`;
     } else {
